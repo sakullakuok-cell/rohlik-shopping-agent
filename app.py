@@ -1,16 +1,18 @@
 import os
-import streamlit as st
 import requests
+import streamlit as st
 
 # Page Config
-st.set_page_config(page_title="Rohlík Shopping Agent", page_icon="🛒", layout="centered")
+st.set_page_config(
+    page_title="Rohlík Shopping Agent", page_icon="🛒", layout="centered"
+)
 st.title("🛒 Family Shopping Agent")
 
 # 1. Retrieve API Key
 API_KEY = os.environ.get("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
 if not API_KEY:
-    st.error("Missing GEMINI_API_KEY in Streamlit secrets.")
-    st.stop()
+  st.error("Missing GEMINI_API_KEY in Streamlit secrets.")
+  st.stop()
 
 # 2. System Instructions
 SYSTEM_INSTRUCTION = """
@@ -38,49 +40,47 @@ SESSION FLOW:
 
 # Initialize Chat Session
 if "messages" not in st.session_state:
-    st.session_state.messages = [{
-        "role": "assistant",
-        "content": "Ahoj! Jsem váš rodinný nákupní asistent. Co vám tento týden chybí v lednici a spíži a co plánujete vařit?"
-    }]
+  st.session_state.messages = [{
+      "role": "assistant",
+      "content": (
+          "Ahoj! Jsem váš rodinný nákupní asistent. Co vám tento týden chybí v"
+          " lednici a spíži a co plánujete vařit?"
+      ),
+  }]
 
 # Render Chat History
 for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+  with st.chat_message(msg["role"]):
+    st.markdown(msg["content"])
 
 # User Input Loop
 if prompt := st.chat_input("Napište, co chybí nebo co chcete vařit..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+  st.session_state.messages.append({"role": "user", "content": prompt})
+  with st.chat_message("user"):
+    st.markdown(prompt)
 
-    with st.chat_message("assistant"):
-        # Format payload for Gemini REST API
-        contents = []
-        for msg in st.session_state.messages:
-            role = "user" if msg["role"] == "user" else "model"
-            contents.append({
-                "role": role,
-                "parts": [{"text": msg["content"]}]
-            })
+  with st.chat_message("assistant"):
+    # Format payload for Gemini REST API
+    contents = []
+    for msg in st.session_state.messages:
+      role = "user" if msg["role"] == "user" else "model"
+      contents.append({"role": role, "parts": [{"text": msg["content"]}]})
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
-        payload = {
-            "contents": contents,
-            "systemInstruction": {
-                "parts": [{"text": SYSTEM_INSTRUCTION}]
-            }
-        }
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
+    payload = {
+        "contents": contents,
+        "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTION}]},
+    }
 
-        try:
-            res = requests.post(url, json=payload, timeout=30)
-            data = res.json()
-            if "candidates" in data and len(data["candidates"]) > 0:
-                reply = data["candidates"][0]["content"]["parts"][0]["text"]
-            else:
-                reply = f"API Error: {data}"
-        except Exception as e:
-            reply = f"Connection failed: {e}"
+    try:
+      res = requests.post(url, json=payload, timeout=30)
+      data = res.json()
+      if "candidates" in data and len(data["candidates"]) > 0:
+        reply = data["candidates"][0]["content"]["parts"][0]["text"]
+      else:
+        reply = f"API Error: {data}"
+    except Exception as e:
+      reply = f"Connection failed: {e}"
 
-        st.markdown(reply)
-        st.session_state.messages.append({"role": "assistant", "content": reply})
+    st.markdown(reply)
+    st.session_state.messages.append({"role": "assistant", "content": reply})
