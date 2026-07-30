@@ -1,24 +1,23 @@
 import os
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 
-# Page Config (Mobile friendly)
+# Page Config
 st.set_page_config(page_title="Rohlík Shopping Agent", page_icon="🛒", layout="centered")
 st.title("🛒 Family Shopping Agent")
 
-# 1. Retrieve API Key from Streamlit Secrets
+# 1. Retrieve API Key
 API_KEY = os.environ.get("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
 if not API_KEY:
     st.error("Missing GEMINI_API_KEY in Streamlit secrets.")
     st.stop()
 
-# Configure Gemini
-genai.configure(api_key=API_KEY)
+client = genai.Client(api_key=API_KEY)
 
-# 2. Complete System Instructions for Gemini
+# 2. System Instructions
 SYSTEM_INSTRUCTION = """
-You are a smart Family Grocery Agent for a family of 4 (including toddlers 2 & 4 yo).
-You manage Rohlík.cz shopping cart preparation via live context chat. You CANNOT execute payments or checkouts.
+You are a smart Family Grocery Agent for a family of 4 (toddlers 2 & 4 yo).
+You manage Rohlík.cz shopping cart preparation via live chat. You CANNOT execute payments or checkouts.
 
 CORNERSTONE GROCERY RULES:
 1. Meat & Poultry: Default to whole chicken (celé kuře) for cost savings and pork (vepřové maso) as main staples. Beef is only added if deeply discounted or if grilling/barbecue is planned.
@@ -34,20 +33,13 @@ CORNERSTONE GROCERY RULES:
 
 SESSION FLOW:
 - Start by asking what is running low in the fridge/pantry and what dinner plans are for the week.
-- Propose a tailored shopping list matching the cornerstone rules and savings goals.
+- Propose a tailored shopping list matching cornerstone rules and savings goals.
 - Use Rohlík's MCP server (https://mcp.rohlik.cz/mcp) tool calls to populate the user's cart.
 - End by displaying a clear summary table of items and total cost, reminding the user to review and pay in the Rohlík app.
 """
 
-# Initialize Gemini Model
-model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
-    system_instruction=SYSTEM_INSTRUCTION
-)
-
 # Initialize Chat Session
-if "chat" not in st.session_state:
-    st.session_state.chat = model.start_chat(history=[])
+if "messages" not in st.session_state:
     st.session_state.messages = [{
         "role": "assistant",
         "content": "Ahoj! Jsem váš rodinný nákupní asistent. Co vám tento týden chybí v lednici a spíži a co plánujete vařit?"
@@ -58,13 +50,17 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# User Input Loop
+# User Input
 if prompt := st.chat_input("Napište, co chybí nebo co chcete vařit..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        response = st.session_state.chat.send_message(prompt)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[m["content"] for m in st.session_state.messages],
+            config={"system_instruction": SYSTEM_INSTRUCTION}
+        )
         st.markdown(response.text)
         st.session_state.messages.append({"role": "assistant", "content": response.text})
