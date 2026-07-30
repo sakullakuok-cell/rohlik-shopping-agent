@@ -1,6 +1,6 @@
 import os
 import streamlit as st
-import google.generativeai as genai
+import requests
 
 # Page Config
 st.set_page_config(page_title="Rohlík Shopping Agent", page_icon="🛒", layout="centered")
@@ -11,9 +11,6 @@ API_KEY = os.environ.get("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
 if not API_KEY:
     st.error("Missing GEMINI_API_KEY in Streamlit secrets.")
     st.stop()
-
-# Configure Gemini API
-genai.configure(api_key=API_KEY)
 
 # 2. System Instructions
 SYSTEM_INSTRUCTION = """
@@ -39,15 +36,8 @@ SESSION FLOW:
 - End by displaying a clear summary table of items and total cost, reminding the user to review and pay in the Rohlík app.
 """
 
-# Initialize Gemini Model
-model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
-    system_instruction=SYSTEM_INSTRUCTION
-)
-
 # Initialize Chat Session
-if "chat" not in st.session_state:
-    st.session_state.chat = model.start_chat(history=[])
+if "messages" not in st.session_state:
     st.session_state.messages = [{
         "role": "assistant",
         "content": "Ahoj! Jsem váš rodinný nákupní asistent. Co vám tento týden chybí v lednici a spíži a co plánujete vařit?"
@@ -65,6 +55,32 @@ if prompt := st.chat_input("Napište, co chybí nebo co chcete vařit..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        response = st.session_state.chat.send_message(prompt)
-        st.markdown(response.text)
-        st.session_state.messages.append({"role": "assistant", "content": response.text})
+        # Format payload for Gemini REST API
+        contents = []
+        for msg in st.session_state.messages:
+            role = "user" if msg["role"] == "user" else "model"
+            contents.append({
+                "role": role,
+                "parts": [{"text": msg["content"]}]
+            })
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+        payload = {
+            "contents": contents,
+            "systemInstruction": {
+                "parts": [{"text": SYSTEM_INSTRUCTION}]
+            }
+        }
+
+        try:
+            res = requests.post(url, json=payload, timeout=30)
+            data = res.json()
+            if "candidates" in data and len(data["candidates"]) > 0:
+                reply = data["candidates"][0]["content"]["parts"][0]["text"]
+            else:
+                reply = f"API Error: {data}"
+        except Exception as e:
+            reply = f"Connection failed: {e}"
+
+        st.markdown(reply)
+        st.session_state.messages.append({"role": "assistant", "content": reply})
