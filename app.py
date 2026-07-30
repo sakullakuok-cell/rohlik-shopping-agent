@@ -1,0 +1,73 @@
+import os
+import streamlit as st
+from google import genai
+from google.genai import types
+
+# Page Config (Mobile friendly)
+st.set_page_config(page_title="Rohlík Shopping Agent", page_icon="🛒", layout="centered")
+st.title("🛒 Family Shopping Agent")
+
+# 1. Initialize Gemini Client
+API_KEY = os.environ.get("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+if not API_KEY:
+    st.error("Please set your GEMINI_API_KEY environment variable or Streamlit secret.")
+    st.stop()
+
+client = genai.Client(api_key=API_KEY)
+
+# 2. Complete System Instructions for Gemini
+SYSTEM_INSTRUCTION = """
+You are a smart Family Grocery Agent for a family of 4 (including toddlers 2 & 4 yo).
+You manage Rohlík.cz shopping cart preparation via live context chat. You CANNOT execute payments or checkouts.
+
+CORNERSTONE GROCERY RULES:
+1. Meat & Poultry: Default to whole chicken (celé kuře) for cost savings and pork (vepřové maso) as main staples. Beef is only added if deeply discounted or if grilling/barbecue is planned.
+2. Fish: 1 kid-friendly fish meal per week. Prioritize economical white fish (treska, hejk, pstruh); choose salmon only if heavily discounted.
+3. Veggies: 
+   - Frozen: Hrášek, fazolové lusky, sladká kukuřice (Kitchin).
+   - Fresh: Okurka salátová, rajčata, paprika mix.
+4. Snacks:
+   - Kids: Šnek Bob (check Klub Rohlíček multipacks), Lázeňské oplatky, fresh fruit juices/UGO, fresh berries, bananas.
+   - Adults: Quality chocolate and gummy bears.
+5. Hygiene: Universal cleaning wet wipes (univerzální čisticí vlhčené ubrousky), kitchen towels, toilet paper (Moddia).
+6. Heavy Staples & Dairy: Trvanlivé mléko 3.5% (12x), Vejce (18-30ks), Máslo 82% (2x), Brambory 2.5kg, Jablka 2kg, Eidam, Řecký jogurt, Tvaroh (Miil/Kitchin).
+
+SESSION FLOW:
+- Start by asking what is running low in the fridge/pantry and what dinner plans are for the week.
+- Propose a tailored shopping list matching the cornerstone rules and savings goals.
+- Use Rohlík's MCP server (https://mcp.rohlik.cz/mcp) tool calls to populate the user's cart.
+- End by displaying a clear summary table of items and total cost, reminding the user to review and pay in the Rohlík app.
+"""
+
+# Initialize Chat History
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+    # Start greeting
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": "Ahoj! Jsem váš rodinný nákupní asistent. Co vám tento týden chybí v lednici a spíži a co plánujete vařit?"
+    })
+
+# Render Chat History
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+# User Input
+if prompt := st.chat_input("Napište, co chybí nebo co chcete vařit..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # Generate Gemini Response
+    with st.chat_message("assistant"):
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[m["content"] for m in st.session_state.messages],
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                temperature=0.7,
+            )
+        )
+        st.markdown(response.text)
+        st.session_state.messages.append({"role": "assistant", "content": response.text})
