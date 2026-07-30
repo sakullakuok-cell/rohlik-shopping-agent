@@ -1,19 +1,19 @@
 import os
 import streamlit as st
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 
 # Page Config (Mobile friendly)
 st.set_page_config(page_title="Rohlík Shopping Agent", page_icon="🛒", layout="centered")
 st.title("🛒 Family Shopping Agent")
 
-# 1. Initialize Gemini Client
+# 1. Retrieve API Key from Streamlit Secrets
 API_KEY = os.environ.get("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
 if not API_KEY:
-    st.error("Please set your GEMINI_API_KEY environment variable or Streamlit secret.")
+    st.error("Missing GEMINI_API_KEY in Streamlit secrets.")
     st.stop()
 
-client = genai.Client(api_key=API_KEY)
+# Configure Gemini
+genai.configure(api_key=API_KEY)
 
 # 2. Complete System Instructions for Gemini
 SYSTEM_INSTRUCTION = """
@@ -39,35 +39,32 @@ SESSION FLOW:
 - End by displaying a clear summary table of items and total cost, reminding the user to review and pay in the Rohlík app.
 """
 
-# Initialize Chat History
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-    # Start greeting
-    st.session_state.messages.append({
+# Initialize Gemini Model
+model = genai.GenerativeModel(
+    model_name="gemini-1.5-flash",
+    system_instruction=SYSTEM_INSTRUCTION
+)
+
+# Initialize Chat Session
+if "chat" not in st.session_state:
+    st.session_state.chat = model.start_chat(history=[])
+    st.session_state.messages = [{
         "role": "assistant",
         "content": "Ahoj! Jsem váš rodinný nákupní asistent. Co vám tento týden chybí v lednici a spíži a co plánujete vařit?"
-    })
+    }]
 
 # Render Chat History
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# User Input
+# User Input Loop
 if prompt := st.chat_input("Napište, co chybí nebo co chcete vařit..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Generate Gemini Response
     with st.chat_message("assistant"):
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[m["content"] for m in st.session_state.messages],
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
-                temperature=0.7,
-            )
-        )
+        response = st.session_state.chat.send_message(prompt)
         st.markdown(response.text)
         st.session_state.messages.append({"role": "assistant", "content": response.text})
