@@ -66,7 +66,7 @@ if prompt := st.chat_input("Napište, co chybí nebo co chcete vařit..."):
       role = "user" if msg["role"] == "user" else "model"
       contents.append({"role": role, "parts": [{"text": msg["content"]}]})
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={API_KEY}"
     payload = {
         "contents": contents,
         "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTION}]},
