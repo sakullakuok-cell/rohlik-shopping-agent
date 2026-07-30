@@ -1,6 +1,6 @@
 import os
 import streamlit as st
-from google import genai
+import google.generativeai as genai
 
 # Page Config
 st.set_page_config(page_title="Rohlík Shopping Agent", page_icon="🛒", layout="centered")
@@ -12,11 +12,12 @@ if not API_KEY:
     st.error("Missing GEMINI_API_KEY in Streamlit secrets.")
     st.stop()
 
-client = genai.Client(api_key=API_KEY)
+# Configure Gemini API
+genai.configure(api_key=API_KEY)
 
 # 2. System Instructions
 SYSTEM_INSTRUCTION = """
-You are a smart Family Grocery Agent for a family of 4 (toddlers 2 & 4 yo).
+You are a smart Family Grocery Agent for a family of 4 (including toddlers 2 & 4 yo).
 You manage Rohlík.cz shopping cart preparation via live chat. You CANNOT execute payments or checkouts.
 
 CORNERSTONE GROCERY RULES:
@@ -38,8 +39,15 @@ SESSION FLOW:
 - End by displaying a clear summary table of items and total cost, reminding the user to review and pay in the Rohlík app.
 """
 
+# Initialize Gemini Model
+model = genai.GenerativeModel(
+    model_name="gemini-1.5-flash",
+    system_instruction=SYSTEM_INSTRUCTION
+)
+
 # Initialize Chat Session
-if "messages" not in st.session_state:
+if "chat" not in st.session_state:
+    st.session_state.chat = model.start_chat(history=[])
     st.session_state.messages = [{
         "role": "assistant",
         "content": "Ahoj! Jsem váš rodinný nákupní asistent. Co vám tento týden chybí v lednici a spíži a co plánujete vařit?"
@@ -50,17 +58,13 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# User Input
+# User Input Loop
 if prompt := st.chat_input("Napište, co chybí nebo co chcete vařit..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[m["content"] for m in st.session_state.messages],
-            config={"system_instruction": SYSTEM_INSTRUCTION}
-        )
+        response = st.session_state.chat.send_message(prompt)
         st.markdown(response.text)
         st.session_state.messages.append({"role": "assistant", "content": response.text})
