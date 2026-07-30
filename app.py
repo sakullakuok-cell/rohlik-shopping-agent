@@ -17,7 +17,7 @@ if not API_KEY:
 # 2. System Instructions
 SYSTEM_INSTRUCTION = """
 You are a smart Family Grocery Agent for a family of 4 (including toddlers 2 & 4 yo).
-You manage Rohlík.cz shopping cart preparation via live chat. You CANNOT execute payments or checkouts.
+You manage Rohlík.cz shopping list preparation via live chat.
 
 CORNERSTONE GROCERY RULES:
 1. Meat & Poultry: Default to whole chicken (celé kuře) for cost savings and pork (vepřové maso) as main staples. Beef is only added if deeply discounted or if grilling/barbecue is planned.
@@ -34,8 +34,7 @@ CORNERSTONE GROCERY RULES:
 SESSION FLOW:
 - Start by asking what is running low in the fridge/pantry and what dinner plans are for the week.
 - Propose a tailored shopping list matching cornerstone rules and savings goals.
-- Use Rohlík's MCP server (https://mcp.rohlik.cz/mcp) tool calls to populate the user's cart.
-- End by displaying a clear summary table of items and total cost, reminding the user to review and pay in the Rohlík app.
+- End by displaying a clear summary table of items and estimated quantities, reminding the user to review and order in their Rohlík app.
 """
 
 # Initialize Chat Session
@@ -75,8 +74,24 @@ if prompt := st.chat_input("Napište, co chybí nebo co chcete vařit..."):
     try:
       res = requests.post(url, json=payload, timeout=30)
       data = res.json()
+
       if "candidates" in data and len(data["candidates"]) > 0:
-        reply = data["candidates"][0]["content"]["parts"][0]["text"]
+        candidate = data["candidates"][0]
+        content = candidate.get("content", {})
+        parts = content.get("parts", [])
+
+        # Extract text across all parts (excluding raw thought parts)
+        texts = [
+            p.get("text", "")
+            for p in parts
+            if "text" in p and not p.get("thought", False)
+        ]
+        if not texts:
+          texts = [p.get("text", "") for p in parts if "text" in p]
+
+        reply = "".join(texts).strip()
+        if not reply:
+          reply = f"API returned no text. Raw response: {data}"
       else:
         reply = f"API Error: {data}"
     except Exception as e:
